@@ -8,10 +8,6 @@ to the extracted evidence. Writes a per-rubric folder containing
 rubric.yaml + evidence.json + score.json, plus a top-level
 aggregated_score.json grouped by criterion.
 
-Install:
-
-    pip install "pydantic-ai>=0.0.14" pyyaml
-
 Run:
 
     python fairscape-agent/rubrics/ai-ready/grade.py \\

@@ -286,7 +286,12 @@ def main() -> int:
         system_prompt = f"{system_prompt}\n\n{args.system_prompt_extra}"
 
     print(f"[grade] using model {args.model}")
-    agent = Agent(args.model, output_type=RubricScore, system_prompt=system_prompt)
+    agent = Agent(
+        args.model,
+        output_type=RubricScore,
+        system_prompt=system_prompt,
+        model_settings={"temperature": 0},
+    )
 
     per_rubric: list[dict] = []
 

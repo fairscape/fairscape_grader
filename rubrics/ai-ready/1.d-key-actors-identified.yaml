@@ -1,0 +1,89 @@
+id: "1.d"
+criterion: "Provenance"
+sub_criterion: "Key Actors Identified"
+
+practice: |
+  Identify people and organizations responsible for obtaining and
+  processing the data, the samples, and subject groups involved in
+  producing the data. Reference these parties along with other
+  dataset metadata.
+suggested_resources: ["ORCID", "ROR"]
+
+intent: |
+  The people and organizations responsible for the data are
+  identified preferably by persistent identifiers — ORCID for individuals,
+  ROR for organizations. This makes
+  attribution unambiguous and machine-resolvable across systems.
+
+what_to_look_for:
+  - author / creator / contributor entries on the root dataset.
+  - publisher and (where applicable) principalInvestigator
+    or equivalent governance contact.
+  - ORCID URIs on people (https://orcid.org/...).
+  - ROR URIs on organizations (https://ror.org/...).
+  - Coverage across roles — collection, processing, governance —
+    not just a single author.
+
+extractor_inputs:
+  type: object
+  properties:
+    author_count:
+      type: integer
+      description: number of authors / creators on the root dataset
+    authors_with_orcid_count:
+      type: integer
+      description: count of those whose @id or identifier resolves to an ORCID URI
+    publisher_present:
+      type: boolean
+      description: true if root publisher is set
+    publisher_has_ror:
+      type: boolean
+      description: true if publisher @id or identifier resolves to a ROR URI? URL of Data Archive
+    principal_investigator_present:
+      type: boolean
+      description: true if a principalInvestigator (or equivalent governance contact) is set on the root dataset
+    root_actors:
+      type: object
+      description: |
+        Verbatim copies of root author, publisher,
+        principalInvestigator (and any contributor / contactPoint
+        entries) for the LLM to inspect.
+
+scoring:
+  "0":
+    label: "Absent"
+    rule: |
+      No actors identified, or only plain-string names with no
+      identifiers and no role coverage.
+  "1":
+    label: "Partial"
+    rule: |
+      Actors are named but do not carry ORCID / ROR identifiers, or
+      coverage is uneven (e.g., authors listed but no organization,
+      or no governance / PI contact).
+  "2":
+    label: "Substantive"
+    rule: |
+      Substantively all key actors carry persistent identifiers
+      (ORCID for people, ROR for organizations), with coverage
+      across collection, processing, and governance roles.
+
+output_schema:
+  type: object
+  required: [score, rationale, evidence]
+  additionalProperties: false
+  properties:
+    score:
+      type: integer
+      enum: [0, 1, 2]
+    rationale:
+      type: string
+      description: "1–3 sentences citing the rule that applied."
+    evidence:
+      type: array
+      items: { type: string }
+      description: "Direct quotes or @id refs from the crate that justify the score."
+    gaps:
+      type: array
+      items: { type: string }
+      description: "Specific things missing that would raise the score. Empty if score is 2."

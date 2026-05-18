@@ -1,0 +1,87 @@
+id: "2.b"
+criterion: "Characterization"
+sub_criterion: "Statistics"
+
+practice: |
+  Provide domain-appropriate statistical characterizations of key
+  features of the dataset to inform analysis planning. Ensure
+  missing values are encoded consistently.
+
+intent: |
+  A modeler can see the shape of the data without loading it —
+  sample sizes, distributions or class balance for key features,
+  and a documented missing-value convention. This is what lets
+  someone decide whether the data fits their analysis before they
+  invest in pulling it down.
+
+what_to_look_for:
+  - hasSummaryStatistics on Dataset entities (or equivalent
+    statistical-summary attachments).
+  - Sample sizes / row + column counts / participant counts on
+    structured Datasets.
+  - Domain-appropriate distributions — class balance for
+    categorical outcomes, range/mean/SD for continuous, count
+    distributions for sequencing, etc.
+  - A consistent missing-value encoding (NA / null / empty string /
+    sentinel) documented somewhere — root description, schema, or
+    a dedicated narrative field.
+
+extractor_inputs:
+  type: object
+  properties:
+    dataset_count:
+      type: integer
+      description: count of entities whose @type contains 'Dataset' (root crate excluded)
+    datasets_with_summary_stats_count:
+      type: integer
+      description: count of Datasets with hasSummaryStatistics or equivalent
+    datasets_with_size_count:
+      type: integer
+      description: count of Datasets with contentSize, rowCount, or sample-count fields
+    summary_stats_samples:
+      type: array
+      description: up to 5 hasSummaryStatistics dicts (or pointers to attached stats files)
+    missing_value_convention_text:
+      type: ["string", "null"]
+      description: |
+        any narrative on missing-value encoding found in root
+        description, additionalProperty, or rai:dataCollectionMissingData
+        (when used to describe convention rather than reasons).
+
+scoring:
+  "0":
+    label: "Absent"
+    rule: |
+      No statistical information beyond raw file size, and no
+      missing-value convention documented.
+  "1":
+    label: "Partial"
+    rule: |
+      Some statistics present (e.g., sample sizes or contentSize)
+      but distributions / class balance not provided, or
+      missing-value handling is unspecified.
+  "2":
+    label: "Substantive"
+    rule: |
+      Domain-appropriate distributions and sample sizes for the
+      major Datasets, plus a documented missing-value convention.
+
+output_schema:
+  type: object
+  required: [score, rationale, evidence]
+  additionalProperties: false
+  properties:
+    score:
+      type: integer
+      enum: [0, 1, 2]
+    rationale:
+      type: string
+      description: "1–3 sentences citing the rule that applied."
+    evidence:
+      type: array
+      items: { type: string }
+      description: "Direct quotes or @id refs from the crate that justify the score."
+    gaps:
+      type: array
+      items: { type: string }
+      description: "Specific things missing that would raise the score. Empty if score is 2."

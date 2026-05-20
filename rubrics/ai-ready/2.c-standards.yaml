@@ -33,10 +33,35 @@ extractor_inputs:
       description: count of entities whose @type contains 'Schema' (or evi:Schema)
     dataset_count:
       type: integer
-      description: count of entities whose @type contains 'Dataset' (root crate excluded)
+      description: |
+        TABULAR-SCOPED count of Datasets — only entities whose format
+        is a tabular container (CSV, TSV, Parquet, H5AD, JSONL,
+        Arrow, Feather, XLSX, ORC, Avro). Image files, instrument
+        directories (e.g. `.d`), BAM / FASTQ / NIfTI / audio are
+        excluded — they cannot carry a tabular schema and the rubric
+        only asks about *structured* datasets.
     datasets_with_schema_count:
       type: integer
-      description: count of Datasets with evi:schema, conformsTo, or schema set to a Schema entity
+      description: |
+        Of the tabular Datasets above, how many are linked to a Schema
+        entity (via evi:schema, conformsTo, or schema). Use this as
+        the numerator and `dataset_count` as the denominator when
+        judging coverage.
+    dataset_count_all:
+      type: integer
+      description: |
+        Total Dataset count including non-tabular. Context only — do
+        NOT use as the coverage denominator.
+    non_tabular_dataset_count:
+      type: integer
+      description: |
+        How many Datasets are non-tabular (images, instrument
+        directories, single-record binaries). Excluded from coverage.
+    datasets_with_schema_all_count:
+      type: integer
+      description: |
+        Schema link count across ALL Datasets (including non-tabular).
+        Context only — not the rubric numerator.
     schemas_referencing_standards_count:
       type: integer
       description: |
@@ -55,15 +80,21 @@ scoring:
   "1":
     label: "Partial"
     rule: |
-      Schemas exist but coverage is partial (only some Datasets
-      linked) or schemas don't reference recognized standards where
-      they reasonably could.
+      Schemas exist but TABULAR coverage is uneven (use
+      `datasets_with_schema_count / dataset_count` — both are
+      tabular-scoped) or schemas don't reference recognized standards
+      where they reasonably could. Do NOT penalize for non-tabular
+      datasets (images, BAMs, instrument directories) lacking a
+      tabular schema — those are out of scope; see
+      `non_tabular_dataset_count`.
   "2":
     label: "Substantive"
     rule: |
-      Substantively all structured Datasets are linked to a
-      machine-readable schema, with relevant standards referenced
-      where applicable.
+      Substantively all TABULAR Datasets are linked to a
+      machine-readable schema (judge via
+      `datasets_with_schema_count / dataset_count`), with relevant
+      standards referenced where applicable. Non-tabular datasets do
+      not count against coverage.
 
 output_schema:
   type: object

@@ -20,6 +20,12 @@ anthropic, openai, google-gla, google, groq. The --api-key value is
 written to the matching env var (ANTHROPIC_API_KEY, OPENAI_API_KEY,
 GOOGLE_API_KEY, GROQ_API_KEY) before the Agent is instantiated.
 
+The `uvarc` prefix routes to the UVA Research Computing GenAI
+OpenAI-compatible endpoint (bypasses pydantic-ai; uses urllib +
+RubricScore validation directly). Example:
+
+    --model "uvarc:Kimi K2.5" --api-key $UVARC_GenAI_API
+
 Calls are made sequentially — 28 round-trips per run. Failed rubrics
 get score: null and an error string in score.json; in the aggregate
 they contribute 0 to the subscore but their max still counts toward
@@ -32,8 +38,10 @@ import json
 import os
 import shutil
 import sys
+import urllib.request
 from collections import defaultdict
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 import yaml
@@ -69,6 +77,9 @@ PROVIDER_ENV_MAP = {
     "google": "GOOGLE_API_KEY",
     "groq": "GROQ_API_KEY",
 }
+
+UVARC_PROVIDER = "uvarc"
+UVARC_BASE_URL = "https://open-webui.rc.virginia.edu/api/chat/completions"
 
 BASE_SYSTEM_PROMPT = (
     "You are an RO-Crate AI-Readiness rubric grader. You score one rubric at a "
@@ -135,13 +146,70 @@ def _setup_api_key(model: str, api_key: str) -> None:
             f"e.g. anthropic:claude-opus-4-7"
         )
     prefix = model.split(":", 1)[0]
+    if prefix == UVARC_PROVIDER:
+        return
     env_var = PROVIDER_ENV_MAP.get(prefix)
     if env_var is None:
+        supported = sorted([*PROVIDER_ENV_MAP, UVARC_PROVIDER])
         raise SystemExit(
-            f"unknown provider prefix {prefix!r}; "
-            f"supported: {sorted(PROVIDER_ENV_MAP)}"
+            f"unknown provider prefix {prefix!r}; supported: {supported}"
         )
     os.environ[env_var] = api_key
+
+
+class UVARCClient:
+    """pydantic-ai Agent stand-in for the UVA RC GenAI OpenAI-compatible endpoint.
+
+    Exposes a `run_sync(prompt)` method that returns an object with `.output`
+    populated by a RubricScore instance, so grade.py's scoring loop can treat
+    it identically to a real pydantic-ai Agent.
+    """
+
+    def __init__(self, model_name: str, api_key: str, system_prompt: str):
+        self.model_name = model_name
+        self.api_key = api_key
+        self.system_prompt = system_prompt
+
+    def run_sync(self, prompt: str):
+        body = json.dumps(
+            {
+                "model": self.model_name,
+                "messages": [
+                    {"role": "system", "content": self.system_prompt},
+                    {
+                        "role": "user",
+                        "content": (
+                            prompt
+                            + "\n\nReturn ONLY a single JSON object matching the "
+                            "output schema above. No markdown fences, no prose "
+                            "before or after."
+                        ),
+                    },
+                ],
+                "temperature": 0,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            UVARC_BASE_URL,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        content = payload["choices"][0]["message"]["content"].strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[: -3]
+            content = content.strip()
+            if content.startswith("json"):
+                content = content[4:].lstrip()
+        data = json.loads(content)
+        return SimpleNamespace(output=RubricScore(**data))
 
 
 def _load_rubric_yaml(rubric_id: str, rubric_slug: str) -> dict:
@@ -282,12 +350,16 @@ def main() -> int:
         system_prompt = f"{system_prompt}\n\n{args.system_prompt_extra}"
 
     print(f"[grade] using model {args.model}")
-    agent = Agent(
-        args.model,
-        output_type=RubricScore,
-        system_prompt=system_prompt,
-        model_settings={"temperature": 0},
-    )
+    prefix, _, model_name = args.model.partition(":")
+    if prefix == UVARC_PROVIDER:
+        agent = UVARCClient(model_name, args.api_key, system_prompt)
+    else:
+        agent = Agent(
+            args.model,
+            output_type=RubricScore,
+            system_prompt=system_prompt,
+            model_settings={"temperature": 0},
+        )
 
     per_rubric: list[dict] = []
 

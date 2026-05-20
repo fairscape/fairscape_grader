@@ -579,6 +579,31 @@ PUBLISHED_FORMATS = {
 PROPRIETARY_FORMATS = {".d", ".d directory group", "raw", ".raw"}
 SOFTWARE_RUNTIME_FORMATS = {"unknown", "executable"}
 
+# Tabular / structured-data formats — the ones a tabular schema can plausibly
+# describe (column types, units, missingness). Images, instrument-vendor
+# directories, single-record binaries (BAM/FASTQ/NIfTI/etc.), and audio
+# deliberately do NOT belong here: they don't carry a tabular schema and
+# shouldn't drag down the 0.c / 2.c "datasets with schema" denominator.
+TABULAR_FORMATS = {
+    "csv", "tsv", "parquet", "h5ad", "jsonl", "ndjson",
+    "arrow", "feather", "xlsx", "xls", "ods", "orc", "avro",
+}
+
+
+def is_tabular_dataset(entity: dict) -> bool:
+    """True iff the dataset's declared format(s) include a tabular container.
+    Datasets without a declared format return False — without a format we
+    can't claim a tabular schema would be appropriate."""
+    fmt = get_format(entity)
+    if not fmt:
+        return False
+    candidates = fmt if isinstance(fmt, list) else [fmt]
+    for f in candidates:
+        key = str(f).strip().lower().lstrip(".")
+        if key in TABULAR_FORMATS:
+            return True
+    return False
+
 
 def _format_buckets(format_distribution: dict) -> Tuple[int, int, dict]:
     """Return (published_count, proprietary_count, software_runtime_distribution).
@@ -674,6 +699,8 @@ def aggregate_stats(bundle: ReleaseBundle) -> Dict[str, Any]:
     summary_stats_samples: List[dict] = []
 
     datasets_with_schema = 0
+    tabular_dataset_count = 0
+    tabular_datasets_with_schema = 0
     datasets_with_hash = 0
     datasets_with_url = 0
     datasets_with_size = 0
@@ -708,10 +735,15 @@ def aggregate_stats(bundle: ReleaseBundle) -> Dict[str, Any]:
     for e in bundle.entities:
         if is_dataset(e):
             counts["dataset"] += 1
+            tabular = is_tabular_dataset(e)
+            if tabular:
+                tabular_dataset_count += 1
             if has_hash(e):
                 datasets_with_hash += 1
             if get_dataset_schema_link(e):
                 datasets_with_schema += 1
+                if tabular:
+                    tabular_datasets_with_schema += 1
             if e.get("hasSummaryStatistics"):
                 summary_stats_count += 1
                 if len(summary_stats_samples) < 5:
@@ -848,6 +880,8 @@ def aggregate_stats(bundle: ReleaseBundle) -> Dict[str, Any]:
         "api_link": api_link,
         "datasets_with_hash": datasets_with_hash,
         "datasets_with_schema": datasets_with_schema,
+        "tabular_dataset_count": tabular_dataset_count,
+        "tabular_datasets_with_schema": tabular_datasets_with_schema,
         "datasets_with_url": datasets_with_url,
         "datasets_with_size": datasets_with_size,
         "datasets_with_summary_stats": summary_stats_count,
@@ -1056,18 +1090,54 @@ def root_conforms_to(bundle: ReleaseBundle) -> List[Any]:
     return dedup
 
 
-def root_summary(bundle: ReleaseBundle) -> dict:
+def build_by_id(entities: List[dict]) -> Dict[str, dict]:
+    """Map @id → entity for every dict in the merged graph that carries one."""
+    return {
+        e["@id"]: e
+        for e in entities
+        if isinstance(e, dict) and isinstance(e.get("@id"), str)
+    }
+
+
+def resolve_ref(value: Any, by_id: Dict[str, dict], _depth: int = 3) -> Any:
+    """Inline-expand ``{"@id": X}`` reference stubs against the merged graph.
+
+    Flat-RO-Crate compliant crates carry Persons, DefinedTerms, and
+    Organizations as top-level @graph entries and reference them from the root
+    via single-key ``{"@id": "..."}`` stubs. Without resolution, the LLM
+    payload sees opaque ids instead of names/affiliations and qualitative
+    scoring drops.
+
+    Recurses into lists and into the resolved entity's fields (so a Person's
+    ``affiliation`` stub also expands). Strings, numbers, and dicts that
+    already carry more than just ``@id`` pass through unchanged. ``_depth``
+    bounds recursion as a cycle guard.
+    """
+    if _depth <= 0:
+        return value
+    if isinstance(value, list):
+        return [resolve_ref(v, by_id, _depth) for v in value]
+    if isinstance(value, dict) and list(value.keys()) == ["@id"]:
+        target = by_id.get(value["@id"])
+        if target is not None:
+            return {k: resolve_ref(v, by_id, _depth - 1) for k, v in target.items()}
+    return value
+
+
+def root_summary(bundle: ReleaseBundle, by_id: Optional[Dict[str, dict]] = None) -> dict:
     root = bundle.root_entity
     desc = root.get("description")
+    if by_id is None:
+        by_id = build_by_id(bundle.entities)
     return {
         "name": root.get("name"),
         "description_excerpt": (str(desc)[:280] + "...") if desc else None,
         "identifier": root.get("identifier") or root.get("@id"),
         "license": root.get("license"),
-        "publisher": root.get("publisher"),
+        "publisher": resolve_ref(root.get("publisher"), by_id),
         "datePublished": root.get("datePublished"),
         "version": root.get("version"),
-        "principalInvestigator": root.get("principalInvestigator"),
+        "principalInvestigator": resolve_ref(root.get("principalInvestigator"), by_id),
         "contactEmail": root.get("contactEmail"),
         "confidentialityLevel": root.get("confidentialityLevel"),
         "sub_crate_count": len(bundle.sub_crates),
@@ -1099,6 +1169,7 @@ class ExtractContext:
     def __init__(self, bundle: ReleaseBundle):
         self.bundle = bundle
         self.root = bundle.root_entity
+        self.by_id = build_by_id(bundle.entities)
         self.stats = aggregate_stats(bundle)
         self.context_namespaces = bundle.context_namespaces
         self.recognized_standards = StandardsDetector.detect(bundle.context_namespaces)
@@ -1128,11 +1199,14 @@ class ExtractContext:
             or self.root.get("usageInfo")
         )
 
-        # Actors / governance
-        self.publisher = self.root.get("publisher")
-        self.governance_committee = (
+        # Actors / governance. Resolve {"@id": ...} stubs against the merged
+        # graph so downstream rubrics see Person names/affiliations rather
+        # than opaque references when the crate is flat-RO-Crate compliant.
+        self.publisher = resolve_ref(self.root.get("publisher"), self.by_id)
+        self.governance_committee = resolve_ref(
             self.root.get("dataGovernanceCommittee")
-            or get_additional_property(self.root, "Data Governance Committee")
+            or get_additional_property(self.root, "Data Governance Committee"),
+            self.by_id,
         )
         self.human_subject = (
             self.root.get("humanSubjectResearch")
@@ -1211,11 +1285,21 @@ class Interoperable(RubricExtractor):
     rubric_slug = "interoperable"
 
     def extract(self, ctx: ExtractContext) -> dict:
+        tabular = ctx.stats["tabular_dataset_count"]
+        tabular_with_schema = ctx.stats["tabular_datasets_with_schema"]
         return {
             "context_namespaces": ctx.context_namespaces,
             "schema_count": ctx.schema_count,
-            "dataset_count": ctx.dataset_count,
-            "datasets_with_schema_count": ctx.stats["datasets_with_schema"],
+            # `dataset_count` / `datasets_with_schema_count` are tabular-scoped
+            # to match the rubric's "every tabular / structured Dataset linked
+            # to a schema" wording. Imaging files, instrument-vendor `.d`
+            # directories, BAM/FASTQ, etc. can't carry a tabular schema and
+            # would otherwise dominate the denominator.
+            "dataset_count": tabular,
+            "datasets_with_schema_count": tabular_with_schema,
+            "dataset_count_all": ctx.dataset_count,
+            "non_tabular_dataset_count": ctx.dataset_count - tabular,
+            "datasets_with_schema_all_count": ctx.stats["datasets_with_schema"],
             "schemas_referencing_standards_count": ctx.stats["schemas_with_standard_ref"],
             "formats_with_published_spec_count": ctx.published_format_count,
             "format_distribution": ctx.stats["format_distribution"],
@@ -1307,13 +1391,15 @@ class KeyActorsIdentified(RubricExtractor):
             "publisher_has_ror": ctx.publisher_has_ror,
             "principal_investigator_present": bool(root.get("principalInvestigator")),
             "root_actors": {
-                "author": root.get("author"),
+                "author": resolve_ref(root.get("author"), ctx.by_id),
                 "publisher": ctx.publisher,
-                "principalInvestigator": root.get("principalInvestigator"),
+                "principalInvestigator": resolve_ref(root.get("principalInvestigator"), ctx.by_id),
                 "contactEmail": root.get("contactEmail"),
                 "ethicalReview": root.get("ethicalReview"),
+                "ethicalReviewContacts": resolve_ref(root.get("ethicalReviewContacts"), ctx.by_id),
                 "governance": ctx.governance_committee,
-                "funder": root.get("funder"),
+                "funder": resolve_ref(root.get("funder"), ctx.by_id),
+                "about": resolve_ref(root.get("about"), ctx.by_id),
             },
         }
 
@@ -1364,10 +1450,18 @@ class Standards(RubricExtractor):
     rubric_slug = "standards"
 
     def extract(self, ctx: ExtractContext) -> dict:
+        tabular = ctx.stats["tabular_dataset_count"]
+        tabular_with_schema = ctx.stats["tabular_datasets_with_schema"]
         return {
             "schema_count": ctx.schema_count,
-            "dataset_count": ctx.dataset_count,
-            "datasets_with_schema_count": ctx.stats["datasets_with_schema"],
+            # Tabular-scoped to match the rubric's "every tabular / structured
+            # Dataset linked to a schema" coverage question — see 0.c for the
+            # full rationale.
+            "dataset_count": tabular,
+            "datasets_with_schema_count": tabular_with_schema,
+            "dataset_count_all": ctx.dataset_count,
+            "non_tabular_dataset_count": ctx.dataset_count - tabular,
+            "datasets_with_schema_all_count": ctx.stats["datasets_with_schema"],
             "schemas_referencing_standards_count": ctx.stats["schemas_with_standard_ref"],
             "schema_samples": ctx.stats["samples"]["schema"],
             "samples_note": ctx.stats["samples_note"],
@@ -1565,7 +1659,7 @@ class WellGoverned(RubricExtractor):
         return {
             "governance_committee": ctx.governance_committee,
             "maintenance_plan_text": ctx.root.get("rai:dataReleaseMaintenancePlan"),
-            "principal_investigator": ctx.root.get("principalInvestigator"),
+            "principal_investigator": resolve_ref(ctx.root.get("principalInvestigator"), ctx.by_id),
             "contact_email": ctx.root.get("contactEmail"),
         }
 
@@ -1691,7 +1785,7 @@ def extract_all_inputs(bundle: ReleaseBundle) -> Dict[str, Any]:
     for cls in ALL_EXTRACTORS:
         rubric_inputs[cls.rubric_id] = cls().extract(ctx)
     return {
-        "root_summary": root_summary(bundle),
+        "root_summary": root_summary(bundle, by_id=ctx.by_id),
         "stats": ctx.stats,
         "rubric_inputs": rubric_inputs,
     }

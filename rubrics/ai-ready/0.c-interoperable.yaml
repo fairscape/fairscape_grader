@@ -38,10 +38,38 @@ extractor_inputs:
       description: count of entities whose @type contains 'Schema' (or 'evi:Schema')
     dataset_count:
       type: integer
-      description: count of entities whose @type contains 'Dataset' (root crate excluded)
+      description: |
+        TABULAR-SCOPED count of Datasets — entities whose format is a
+        tabular container (CSV, TSV, Parquet, H5AD, JSONL, Arrow,
+        Feather, XLSX, ORC, Avro). Image files, instrument-vendor
+        directories (e.g. `.d`), BAM / FASTQ / NIfTI binaries, audio,
+        and PDFs are NOT counted here — they don't carry a tabular
+        schema and are not the target of this rubric.
     datasets_with_schema_count:
       type: integer
-      description: count of Datasets with evi:schema, conformsTo, or schema set to a Schema entity
+      description: |
+        Of the tabular Datasets above, how many are linked to a Schema
+        entity (via evi:schema, conformsTo, or schema). Use this as the
+        numerator and `dataset_count` as the denominator when judging
+        coverage.
+    dataset_count_all:
+      type: integer
+      description: |
+        Total Dataset count INCLUDING non-tabular files (images, BAMs,
+        instrument outputs, etc.). Provided for context — do NOT use
+        this as the coverage denominator.
+    non_tabular_dataset_count:
+      type: integer
+      description: |
+        How many of the total Datasets are non-tabular (images,
+        instrument-vendor directories, single-record binaries). These
+        are excluded from the coverage ratio because they cannot
+        carry a tabular schema.
+    datasets_with_schema_all_count:
+      type: integer
+      description: |
+        Schema link count across ALL Datasets (including non-tabular).
+        Context only — not the rubric numerator.
     formats_with_published_spec_count:
       type: integer
       description: |
@@ -60,15 +88,20 @@ scoring:
     label: "Partial"
     rule: |
       Metadata uses a recognized JSON-LD vocabulary (RO-Crate
-      baseline) but Datasets lack linked schemas, or a meaningful
-      fraction of data files use formats without a published spec.
+      baseline) but TABULAR Datasets largely lack linked schemas
+      (use `datasets_with_schema_count / dataset_count`), or a
+      meaningful fraction of data files use formats without a
+      published spec.
   "2":
     label: "Substantive"
     rule: |
       Metadata is in JSON-LD with recognized vocabularies AND
-      structured Datasets carry linked schemas AND data files use
-      formats with published specifications. The FAIR baseline for
-      interoperability is met.
+      substantively all TABULAR Datasets carry linked schemas
+      (`datasets_with_schema_count / dataset_count` covers the
+      tabular set; non-tabular datasets in `non_tabular_dataset_count`
+      are out of scope and do NOT count against coverage) AND data
+      files use formats with published specifications. The FAIR
+      baseline for interoperability is met.
 
 output_schema:
   type: object

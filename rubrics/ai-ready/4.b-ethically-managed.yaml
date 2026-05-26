@@ -46,12 +46,6 @@ extractor_inputs:
         any narrative or additionalProperty referencing
         de-identification, anonymization, k-anonymity, differential
         privacy, aggregation, or HL7 privacy tags.
-    privacy_protection_methods_mentioned:
-      type: array
-      description: |
-        list of recognized methods detected in the narrative —
-        'Safe Harbor', 'Expert Determination', 'k-anonymity',
-        'differential privacy', 'aggregation', etc.
     confidentiality_level:
       type: ["string", "null"]
       description: confidentialityLevel on the root dataset (HL7 code — normal / restricted / very restricted)

@@ -15,32 +15,85 @@ intent: |
   invest in pulling it down.
 
 what_to_look_for:
-  - hasSummaryStatistics on Dataset entities (or equivalent
-    statistical-summary attachments).
-  - Sample sizes / row + column counts / participant counts on
-    structured Datasets.
-  - Domain-appropriate distributions — class balance for
+  - >-
+    Per-Dataset fields lifted onto Dataset itself — rowCount,
+    columnCount, contentSize, sampleSize. Any one of these counts
+    as "characterized" for that Dataset.
+  - >-
+    hasSummaryStatistics pointing at a child Dataset that carries
+    richer per-column stats (dtype / null counts / numeric
+    min/max/mean/std, often serialized as additionalProperty
+    perColumnStats). Equally valid as inline fields.
+  - >-
+    Domain-appropriate distributions — class balance for
     categorical outcomes, range/mean/SD for continuous, count
     distributions for sequencing, etc.
-  - A consistent missing-value encoding (NA / null / empty string /
+  - >-
+    A consistent missing-value encoding (NA / null / empty string /
     sentinel) documented somewhere — root description, schema, or
     a dedicated narrative field.
+
+scope_note: |
+  Coverage counts are TABULAR-SCOPED. Datasets whose format is an
+  image (jpg/png/tiff), vendor binary directory (.d / .raw),
+  sequencing read file (BAM/FASTQ), audio, or other non-tabular
+  format cannot meaningfully carry row/column counts or summary
+  distributions, so they are excluded from both numerator and
+  denominator. Do not penalize a crate for those entities lacking
+  rowCount or hasSummaryStatistics — check
+  non_tabular_dataset_count and judge against tabular_dataset_count
+  instead. `summary_stats_samples` is illustrative (max 5), not
+  exhaustive — absence of an entity from the sample doesn't mean
+  it lacks stats.
 
 extractor_inputs:
   type: object
   properties:
     dataset_count:
       type: integer
-      description: count of entities whose @type contains 'Dataset' (root crate excluded)
+      description: |
+        TABULAR Dataset count — the rubric denominator. Datasets in
+        non-tabular formats are excluded so they don't drag the
+        score. (Alias of tabular_dataset_count.)
+    tabular_dataset_count:
+      type: integer
+      description: count of Datasets whose declared format is tabular (csv/tsv/parquet/h5ad/jsonl/xlsx/...).
+    dataset_count_all:
+      type: integer
+      description: count of all Dataset entities (root crate excluded), tabular and non-tabular combined.
+    non_tabular_dataset_count:
+      type: integer
+      description: |
+        count of Dataset entities that are NOT tabular (images,
+        vendor binary dirs, BAM/FASTQ, audio, etc.). These are
+        expected to lack rowCount / hasSummaryStatistics and do not
+        count against the score.
     datasets_with_summary_stats_count:
       type: integer
-      description: count of Datasets with hasSummaryStatistics or equivalent
+      description: |
+        count of TABULAR Datasets carrying hasSummaryStatistics
+        (link to a child SummaryStats entity).
+    datasets_with_summary_stats_all_count:
+      type: integer
+      description: same, over all Datasets (tabular + non-tabular), for cross-check.
     datasets_with_size_count:
       type: integer
-      description: count of Datasets with contentSize, rowCount, or sample-count fields
+      description: |
+        count of TABULAR Datasets carrying at least one of the
+        lifted per-Dataset characterization fields — rowCount,
+        columnCount, contentSize, sampleSize, or size.
+    datasets_with_size_all_count:
+      type: integer
+      description: same, over all Datasets, for cross-check.
     summary_stats_samples:
       type: array
-      description: up to 5 hasSummaryStatistics dicts (or pointers to attached stats files)
+      description: |
+        Up to 5 illustrative entries showing how characterization is
+        attached on this crate — a mix of (a) Datasets with
+        hasSummaryStatistics linking a child SummaryStats Dataset,
+        and (b) Datasets carrying the lifted fields (rowCount /
+        columnCount / contentSize / sampleSize) directly. Treat as
+        evidence of pattern, not an exhaustive list.
     missing_value_convention_text:
       type: ["string", "null"]
       description: |
@@ -52,19 +105,28 @@ scoring:
   "0":
     label: "Absent"
     rule: |
-      No statistical information beyond raw file size, and no
-      missing-value convention documented.
+      No statistical information on tabular Datasets beyond raw
+      file size, and no missing-value convention documented. (A
+      crate with zero tabular Datasets but rich image/binary
+      content is not "absent" — score it against what could
+      plausibly be characterized.)
   "1":
     label: "Partial"
     rule: |
-      Some statistics present (e.g., sample sizes or contentSize)
-      but distributions / class balance not provided, or
-      missing-value handling is unspecified.
+      Some characterization present on tabular Datasets — either
+      lifted fields (rowCount / columnCount / contentSize /
+      sampleSize) or hasSummaryStatistics links exist for some, but
+      not most, OR distributions / class balance are not provided,
+      OR missing-value handling is unspecified.
   "2":
     label: "Substantive"
     rule: |
-      Domain-appropriate distributions and sample sizes for the
-      major Datasets, plus a documented missing-value convention.
+      Most tabular Datasets are characterized — via the lifted
+      per-Dataset fields, linked SummaryStats children, or both —
+      AND domain-appropriate distributions / class balance exist
+      for the major Datasets, AND a missing-value convention is
+      documented. Coverage is judged against tabular_dataset_count,
+      not dataset_count_all.
 
 output_schema:
   type: object

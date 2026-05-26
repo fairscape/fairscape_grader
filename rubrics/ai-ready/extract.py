@@ -294,15 +294,7 @@ USED_ML_MODEL_KEYS = ("usedMLModel", "evi:usedMLModel")
 INPUTS_KEYS = USED_DATASET_KEYS + (f"{EVI_PREFIX}inputs", "evi:inputs", "used", "prov:used")
 OUTPUTS_KEYS = ("generated", "prov:generated", f"{EVI_PREFIX}outputs", "evi:outputs")
 FORMAT_KEYS = ("format", "fileFormat", "encodingFormat")
-SCHEMA_LINK_KEYS = (
-    "evi:schema",
-    "EVI:Schema",
-    f"{EVI_PREFIX}schema",
-    f"{EVI_PREFIX}Schema",
-    "schema",
-    "conformsTo",
-    "dataSchema",
-)
+SCHEMA_LINK_FALLBACK_KEYS = ("conformsTo", "dataSchema")
 CONTENT_URL_KEYS = ("contentUrl", "url", "distribution")
 
 PROV_LINK_FIELDS = (
@@ -351,8 +343,23 @@ def get_format(entity: dict) -> Any:
     return first_present(entity, *FORMAT_KEYS)
 
 
+def _local_name(key: str) -> str:
+    for sep in ("#", ":"):
+        if sep in key:
+            key = key.rsplit(sep, 1)[-1]
+    return key
+
+
 def get_dataset_schema_link(entity: dict) -> Any:
-    return first_present(entity, *SCHEMA_LINK_KEYS)
+    # Match any key whose local name is "schema" case-insensitively — covers
+    # every prefix/case combo of evi:schema (evi:schema, evi:Schema, EVI:Schema,
+    # https://w3id.org/EVI#Schema, …) plus the bare `schema` property.
+    for k, v in entity.items():
+        if v in (None, "", [], {}):
+            continue
+        if _local_name(k).lower() == "schema":
+            return v
+    return first_present(entity, *SCHEMA_LINK_FALLBACK_KEYS)
 
 
 def has_provenance_link(entity: dict) -> bool:
@@ -701,6 +708,8 @@ def aggregate_stats(bundle: ReleaseBundle) -> Dict[str, Any]:
     datasets_with_schema = 0
     tabular_dataset_count = 0
     tabular_datasets_with_schema = 0
+    tabular_datasets_with_summary_stats = 0
+    tabular_datasets_with_size = 0
     datasets_with_hash = 0
     datasets_with_url = 0
     datasets_with_size = 0
@@ -744,12 +753,35 @@ def aggregate_stats(bundle: ReleaseBundle) -> Dict[str, Any]:
                 datasets_with_schema += 1
                 if tabular:
                     tabular_datasets_with_schema += 1
+            # A Dataset is "characterized" if it either links a hasSummaryStatistics
+            # entity, OR carries the lifted per-Dataset fields directly
+            # (rowCount/columnCount/contentSize/sampleSize), since those now live
+            # on Dataset itself per fairscape_models >= 1.1.4.
+            has_direct_stats_field = any(
+                e.get(k) is not None for k in ("rowCount", "columnCount", "contentSize", "sampleSize", "size")
+            )
             if e.get("hasSummaryStatistics"):
                 summary_stats_count += 1
+                if tabular:
+                    tabular_datasets_with_summary_stats += 1
                 if len(summary_stats_samples) < 5:
-                    summary_stats_samples.append({k: e.get(k) for k in ("@id", "name", "hasSummaryStatistics") if e.get(k)})
-            if e.get("contentSize") or e.get("rowCount") or e.get("size"):
+                    summary_stats_samples.append({
+                        k: e.get(k) for k in (
+                            "@id", "name", "format", "hasSummaryStatistics",
+                            "rowCount", "columnCount", "contentSize", "sampleSize",
+                        ) if e.get(k) is not None
+                    })
+            elif has_direct_stats_field and len(summary_stats_samples) < 5:
+                summary_stats_samples.append({
+                    k: e.get(k) for k in (
+                        "@id", "name", "format",
+                        "rowCount", "columnCount", "contentSize", "sampleSize",
+                    ) if e.get(k) is not None
+                })
+            if has_direct_stats_field:
                 datasets_with_size += 1
+                if tabular:
+                    tabular_datasets_with_size += 1
             if is_embargoed(e):
                 datasets_embargoed += 1
             url = first_present(e, "contentUrl", "url")
@@ -882,6 +914,8 @@ def aggregate_stats(bundle: ReleaseBundle) -> Dict[str, Any]:
         "datasets_with_schema": datasets_with_schema,
         "tabular_dataset_count": tabular_dataset_count,
         "tabular_datasets_with_schema": tabular_datasets_with_schema,
+        "tabular_datasets_with_summary_stats": tabular_datasets_with_summary_stats,
+        "tabular_datasets_with_size": tabular_datasets_with_size,
         "datasets_with_url": datasets_with_url,
         "datasets_with_size": datasets_with_size,
         "datasets_with_summary_stats": summary_stats_count,
@@ -998,27 +1032,12 @@ def scan_irb_refs(root: dict) -> List[str]:
 
 
 def privacy_protection_text(root: dict) -> Optional[str]:
-    for cand in (
-        root.get("rai:dataAnonymizationApplied"),
-        root.get("deidentified"),
-        get_additional_property(root, "De-identification"),
-        get_additional_property(root, "Privacy Protection"),
-    ):
-        if cand:
-            return str(cand)
+    val = root.get("rai:personalSensitiveInformation")
+    if val:
+        if isinstance(val, list):
+            return ", ".join(str(v) for v in val)
+        return str(val)
     return None
-
-
-def privacy_methods_mentioned(root: dict) -> List[str]:
-    blob = json.dumps(root, default=str).lower()
-    found: List[str] = []
-    for m in (
-        "safe harbor", "expert determination", "k-anonymity", "differential privacy",
-        "aggregation", "de-identif", "anonymiz", "pseudonymiz",
-    ):
-        if m in blob:
-            found.append(m)
-    return found
 
 
 def find_datasheet_entity(bundle: ReleaseBundle) -> Optional[dict]:
@@ -1396,7 +1415,6 @@ class KeyActorsIdentified(RubricExtractor):
                 "principalInvestigator": resolve_ref(root.get("principalInvestigator"), ctx.by_id),
                 "contactEmail": root.get("contactEmail"),
                 "ethicalReview": root.get("ethicalReview"),
-                "ethicalReviewContacts": resolve_ref(root.get("ethicalReviewContacts"), ctx.by_id),
                 "governance": ctx.governance_committee,
                 "funder": resolve_ref(root.get("funder"), ctx.by_id),
                 "about": resolve_ref(root.get("about"), ctx.by_id),
@@ -1430,14 +1448,24 @@ class Statistics(RubricExtractor):
     rubric_slug = "statistics"
 
     def extract(self, ctx: ExtractContext) -> dict:
+        # Statistics coverage is tabular-scoped: image directories, vendor
+        # binaries (.d / .raw), BAM/FASTQ, etc. can't plausibly carry row/column
+        # counts or summary distributions, so they shouldn't drag the denominator
+        # down. Both totals are reported so the grader can sanity-check.
+        tabular = ctx.stats["tabular_dataset_count"]
         return {
-            "dataset_count": ctx.dataset_count,
+            "dataset_count": tabular,
+            "tabular_dataset_count": tabular,
+            "dataset_count_all": ctx.dataset_count,
+            "non_tabular_dataset_count": ctx.dataset_count - tabular,
             "datasets_with_summary_stats_count": (
                 ctx.root.get("evi:entitiesWithSummaryStats")
                 if ctx.root.get("evi:entitiesWithSummaryStats") is not None
-                else ctx.stats["datasets_with_summary_stats"]
+                else ctx.stats["tabular_datasets_with_summary_stats"]
             ),
-            "datasets_with_size_count": ctx.stats["datasets_with_size"],
+            "datasets_with_summary_stats_all_count": ctx.stats["datasets_with_summary_stats"],
+            "datasets_with_size_count": ctx.stats["tabular_datasets_with_size"],
+            "datasets_with_size_all_count": ctx.stats["datasets_with_size"],
             "summary_stats_samples": ctx.stats["summary_stats_samples"],
             "samples_note": ctx.stats["samples_note"],
             "missing_value_convention_text": ctx.root.get("rai:dataCollectionMissingData"),
@@ -1559,6 +1587,7 @@ class EthicallyAcquired(RubricExtractor):
         return {
             "rai_dataCollection": root.get("rai:dataCollection"),
             "human_subject_research_value": ctx.human_subject,
+            "ethical_review_text": root.get("ethicalReview"),
             "informed_consent": root.get("informedConsent") or root.get("d4d:informedConsent"),
             "at_risk_populations": root.get("atRiskPopulations") or root.get("d4d:atRiskPopulations"),
             "irb_or_consent_references": scan_irb_refs(root),
@@ -1576,7 +1605,6 @@ class EthicallyManaged(RubricExtractor):
             "ethical_review_text": root.get("ethicalReview"),
             "governance_committee": ctx.governance_committee,
             "privacy_protection_text": privacy_protection_text(root),
-            "privacy_protection_methods_mentioned": privacy_methods_mentioned(root),
             "confidentiality_level": root.get("confidentialityLevel"),
         }
 

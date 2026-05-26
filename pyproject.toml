@@ -9,6 +9,7 @@ description = "Helper module for the FAIRSCAPE RO-Crate wizard Claude Code skill
 requires-python = ">=3.10"
 dependencies = [
     "fairscape-models",
+    "fairscape-cli",
     "pydantic-ai>=0.0.14",
     "pyyaml",
 ]

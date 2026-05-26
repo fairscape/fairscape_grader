@@ -18,6 +18,9 @@ intent: |
 
 what_to_look_for:
   - rai:dataCollection narrative describing how data was obtained.
+  - ethicalReview narrative — text describing the ethical-review
+    process, IRB body, or governing framework applied to the
+    dataset's acquisition.
   - Human Subject Research declaration (humanSubjectResearch field
     or additionalProperty named 'Human Subject Research').
   - informedConsent — whether subjects consented and what the
@@ -46,6 +49,12 @@ extractor_inputs:
       description: |
         humanSubjectResearch field, or additionalProperty whose name
         matches 'Human Subject Research' (or similar).
+    ethical_review_text:
+      type: ["string", "null"]
+      description: |
+        ethicalReview field on the root dataset — narrative describing
+        the ethical-review process, IRB body, or governing framework
+        applied to the dataset's acquisition.
     informed_consent:
       type: ["string", "boolean", "null"]
       description: |

@@ -20,6 +20,7 @@ Read `.fairscape-remote-state.json` (in the current working directory by default
      Schemas:         <M of N groups> inferred  (<E entries back-linked>)
      AI-Ready paper:  <paper.path>  (<M> fields merged — K RAI, S standard)
      Grading:         <K of 28> rubrics  →  <total>/<max>  (<pct>%)
+     Improvements:    <N> ran (<comma list>); <K> skipped; rescored: <yes/no, delta>
 
    Last activity: <ts> — <skill>: <summary>
    ```
@@ -30,6 +31,8 @@ Read `.fairscape-remote-state.json` (in the current working directory by default
    - **"Show me the schemas"** → list `state.schemas` by `name` and `schema_path`.
    - **"Show me the AI-Ready fields"** (or "RAI fields") → dump keys of `state.ai_ready` with one-line previews per value. (Fall back to `state.rai` for state files written by an earlier version of the wizard.)
    - **"Show me the score breakdown"** → if `state.grading.aggregated_score_path` exists, read it and render the criterion-by-criterion summary.
+   - **"Show me the improvements"** → if `state.improvements` exists, list `ran`, `skipped`, and any `validation_failures`. If `rescored_at` is set, show the score delta between the pre-improvement and post-improvement `state.grading.summary`.
+   - **"Run more improvements"** → invoke `post-grade-improve`. Allowed from `phase = graded` or `phase = improved`.
    - **"Remove schema X"** → drop the entry from `state.schemas` and the matching id from `state.schemas_done`; append a `removed` `history` entry.
    - **"Restart from phase X"** → set `state.phase = "<earlier phase>"` and clear downstream lists; warn before destructive resets.
 

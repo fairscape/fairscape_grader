@@ -1,6 +1,6 @@
 ---
 name: fairscape-rocrate-wizard
-description: Interview a non-expert user through building a FAIRSCAPE RO-Crate for a project directory. Drives the full conversation; delegates to scan-project-folder, extract-crate-metadata, register-dataset, register-folder-of-alike, register-software, create-computation, plausibility-check, checkpoint, and emit-build-script.
+description: Interview a non-expert user through building a FAIRSCAPE RO-Crate for a project directory. Drives the full conversation; delegates to preflight-check, env-setup, scan-project-folder, extract-crate-metadata, register-dataset, register-folder-of-alike, register-software, create-computation, plausibility-check, checkpoint, and emit-build-script.
 ---
 
 # FAIRSCAPE RO-Crate Wizard
@@ -19,7 +19,9 @@ You are interviewing a user who wants to document a research pipeline as an RO-C
 ## Conversation flow
 
 ### 1. Open
-Run `pwd` to confirm the working directory. Then check for `.fairscape-wizard-state.json`:
+**First**: invoke `preflight-check` — verifies Python version, the `fairscape-cli` binary, and the three packages the wizard imports. On pass, continue silently (one-line confirmation). On fail, surface the blockers and offer `env-setup`; if the user says skip, stop here — we cannot proceed without the environment in place.
+
+Then run `pwd` to confirm the working directory. Check for `.fairscape-wizard-state.json`:
 - **Exists** → invoke `checkpoint` skill, summarize what's captured, ask "Resume from here, or start over?"
 - **Doesn't exist** → say one sentence about what you'll do ("I'll walk you through your project and write a script that builds the RO-Crate. Quit anytime — I save as we go."), then proceed.
 

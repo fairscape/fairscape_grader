@@ -1,6 +1,6 @@
 ---
 name: fairscape-remote-rocrate-wizard
-description: Build a FAIRSCAPE RO-Crate from a public Dataverse DOI or PhysioNet URL, without downloading the data. Drives a 5-phase flow — import → remote schema inference → AI-Ready enrichment from a paper → provenance tracking (computations + link-inverses, with embargoed placeholders for missing raw inputs) → agentic rubric grading. Delegates to remote-import, remote-schema-infer, remote-ai-ready-enrich, remote-provenance-tracking, register-embargoed-dataset, agentic-rescore, and remote-checkpoint.
+description: Build a FAIRSCAPE RO-Crate from a public Dataverse DOI or PhysioNet URL, without downloading the data. Drives a 6-phase flow — import → remote schema inference → AI-Ready enrichment from a paper → provenance tracking (computations + link-inverses, with embargoed placeholders for missing raw inputs) → agentic rubric grading → optional post-grade improvements that target the rubrics that scored below ceiling. Runs preflight-check first; routes to env-setup if anything is missing. Delegates to preflight-check, env-setup, remote-import, remote-schema-infer, remote-ai-ready-enrich, remote-provenance-tracking, register-embargoed-dataset, agentic-rescore, post-grade-improve, and remote-checkpoint.
 ---
 
 # FAIRSCAPE Remote-Source RO-Crate Wizard
@@ -20,6 +20,8 @@ This wizard is **separate from** `fairscape-rocrate-wizard`. That one interviews
 
 ### 1. Open
 
+**First**, invoke `preflight-check`. It verifies Python ≥ 3.10, the `fairscape-cli` binary on PATH, and that `fairscape_models`, `fairscape_cli`, and `fairscape_wizard` import. On pass, one-line confirmation and continue. On fail, surface the blockers and offer `env-setup` (it walks the user through PyPI vs editable dev install, optionally setting up a fresh `.venv`). If the user picks `skip` at env-setup, stop here — none of the phases below can run without the environment.
+
 `Bash pwd` to confirm the working directory.
 
 Check for `.fairscape-remote-state.json`:
@@ -28,12 +30,13 @@ Check for `.fairscape-remote-state.json`:
 
   > *"I'll build an RO-Crate — a structured folder of metadata about a published dataset — by pulling everything I can from a public Dataverse or PhysioNet record. The data files themselves stay on the repository's servers; we just record their URLs and describe them.*
   >
-  > *We'll go through five phases:*
+  > *We'll go through six phases:*
   > *1. **Import.** Pull dataset-level metadata (title, authors, DOI, file list) from the repository's API and write the starter `ro-crate-metadata.json`.*
   > *2. **Schemas.** Group the tabular files by name pattern, sample one representative per group, and infer column names + types so the crate describes what's in each file.*
   > *3. **AI-Ready enrichment** (optional). If you have a paper describing the dataset, I'll read it and add the fields that make the crate AI-Ready — biases, limitations, collection methods, intended use cases, license/access details. Most of these live in the MLCommons RAI vocabulary (the `rai:*` field prefix); the bucket also includes standard descriptors like `license` and `conditionsOfAccess`.*
   > *4. **Provenance tracking** (optional). Document the pipeline that produced the derived files — for each step, what software ran (ideally a GitHub or Zenodo link), which datasets it consumed, which datasets it produced. We then run a tool that fills in the reverse links so every output points back at the step that made it.*
   > *5. **Grading** (optional). Score the crate against the 28-rubric AI-Ready checklist so you see where it's strong and where there are gaps.*
+  > *6. **Improvements** (optional). After grading, I'll show you which rubrics scored below ceiling and offer focused skills for the mechanical fixes — ORCID URIs on authors, ontology IRIs on keywords, the ethics field set, summary statistics, hash coverage, container/env references. Each fix is interview-guided, edits the crate in place, and re-validates against the schema before writing.*
   >
   > *I save my progress after every step to `.fairscape-remote-state.json` in this folder — quit anytime, run me again with the same command and I'll pick up where we left off."*
 
@@ -128,7 +131,21 @@ Three answers:
 
 When grading finishes, `state.phase = "graded"`. Surface the per-criterion rollup with one-line interpretation, e.g. *"FAIRness 6/8 — strong on findability and accessibility; the gap is around interoperable namespace coverage. Provenance 5/8 — the importer didn't have any computations or software in scope so this whole criterion is below ceiling."*
 
-### 7. Done
+### 7. Phase 6 — Post-grade improvements (optional)
+
+Frame the phase first:
+
+> *"**Phase 6 — Improvements.** Your score has the room to climb. Most crates after Phase 5 land in the 67–77 % range, and the recurring gaps are mechanical — ORCID URIs not on the authors, keywords not grounded in ontologies, the ethics field set partly filled, summary stats and hashes missing, container/env undocumented. I've got a focused skill for each of those. You pick which to run, I'll interview you for just what's needed, edit the crate JSON in place, and validate every edit against the fairscape_models schema before writing. When you're done choosing, I'll offer to re-grade just the touched rubrics so you can see the new score."*
+
+Then ask:
+
+> *"Want to run any improvement skills, or stop here? (`yes` / `skip`.)"*
+
+If `yes`, invoke `post-grade-improve`. It handles the menu, dispatches the leaves, and writes the new `state.improvements` block. When it returns, `state.phase = "improved"`.
+
+If `skip`, leave `state.phase = "graded"` and tell the user they can run `/post-grade-improve` later from anywhere with this state file.
+
+### 8. Done
 
 Print one paragraph:
 ```
@@ -146,7 +163,7 @@ All skills in this flow read and write `<cwd>/.fairscape-remote-state.json` (ato
 ```json
 {
   "schema_version": 1,
-  "phase": "init|imported|schemas_done|rai_done|provenance_tracked|graded",
+  "phase": "init|imported|schemas_done|rai_done|provenance_tracked|graded|improved",
   "source": {"kind": "dataverse|physionet",
              "url_or_doi": "...",
              "server_url": "..."},
@@ -174,6 +191,13 @@ All skills in this flow read and write `<cwd>/.fairscape-remote-state.json` (ato
   "grading": {"dir": "...", "completed_rubrics": [...],
               "aggregated_score_path": "...",
               "summary": {"total": N, "max": M, "percentage": P}},
+  "improvements": {
+    "ran": ["link-authors-orcids", "ethics-questionnaire"],
+    "skipped": [...],
+    "validation_failures": [],
+    "rescored_at": "ISO-8601 or null",
+    "last_run_at": "ISO-8601"
+  },
   "datasheet_built_at": "ISO-8601",
   "history": [{"ts": "...", "skill": "...", "summary": "..."}]
 }
@@ -190,7 +214,8 @@ Each delegated skill appends to `history` with a one-line summary after every co
 | `schemas_done`        | `remote-ai-ready-enrich`               |
 | `rai_done`            | `remote-provenance-tracking` (ask first) |
 | `provenance_tracked`  | `fairscape-cli build datasheet` (auto, no prompt) → `agentic-rescore` (ask first) |
-| `graded`              | done — offer to re-run any phase       |
+| `graded`              | `post-grade-improve` (ask first) — Phase 6 |
+| `improved`            | done — offer to run more `post-grade-improve` leaves or re-grade |
 
 (The `rai_done` phase label is internal — the enrichment phase is now called "AI-Ready enrichment" to the user, but the label stays so resume logic works on any state files already on disk. Don't change it.)
 

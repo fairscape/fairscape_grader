@@ -1,21 +1,26 @@
 ---
 name: remote-checkpoint
-description: Summarize the current remote-source wizard state for the user and confirm whether to continue. Reads .fairscape-remote-state.json. Invoked at session resume and between phases.
+description: Summarize the current wizard state for the user and confirm whether to continue. Reads .fairscape-state.json (or legacy .fairscape-remote-state.json) and tolerates both schema_version 1 and 2; handles both remote and local source kinds. Invoked at session resume and between phases.
 ---
 
-# Remote checkpoint
+# Wizard checkpoint
 
-Read `.fairscape-remote-state.json` (in the current working directory by default) and produce a short status summary. Ask whether to continue, edit, or stop.
+Read `.fairscape-state.json` (in the current working directory by default; fall back to `.fairscape-remote-state.json` if the unified name isn't there yet) and produce a short status summary. Ask whether to continue, edit, or stop.
+
+Tolerates both `schema_version: 1` and `2`. The only structural difference is v2 adds `source.kind = "local"`, `source.project_root`, `scan`, `crate_metadata`, and the pre-import phases `metadata_captured` and `manifest_built` — for v1 state files these fields are simply absent. Don't crash on either.
 
 ## Procedure
 
-1. `Read` the state file. If it doesn't exist, say so and offer to start a fresh remote-source wizard.
+1. `Read` the state file. If it doesn't exist, say so and offer to start a fresh wizard.
 2. Compose a summary using **counts**, not full records:
    ```
-   Source: <kind> <url_or_doi>
+   Source: <kind> <url_or_doi or project_root>
    Crate:  <crate_dir>
 
    Phase: <phase>
+     Form metadata:   <crate_metadata.name>  (local-source only)
+     Folder scan:     <N> files in <K> bulk groups  (local-source only)
+     Manifest built:  <manifest.csv path>          (local or generic-remote only)
      Imported:        YYYY-MM-DD HH:MM  (<N> tabular files, <K> .gz skipped)
      Schemas:         <M of N groups> inferred  (<E entries back-linked>)
      AI-Ready paper:  <paper.path>  (<M> fields merged — K RAI, S standard)
@@ -24,7 +29,7 @@ Read `.fairscape-remote-state.json` (in the current working directory by default
 
    Last activity: <ts> — <skill>: <summary>
    ```
-   Omit lines for phases that haven't started. Pull the last-activity line from the most recent `state.history` entry.
+   Omit lines for phases that haven't started or aren't applicable to this source kind. Pull the last-activity line from the most recent `state.history` entry.
 3. Ask: **"Continue from `<phase>`, or fix something first?"**
 4. Common follow-ups:
    - **"Show me the imported files"** → list `state.tabular_files` by `name`, format, and size_bytes.
@@ -40,4 +45,4 @@ Read `.fairscape-remote-state.json` (in the current working directory by default
 
 - Don't dump full JSON unless explicitly asked.
 - Don't auto-advance the phase — that's the next skill's job. You only summarize.
-- Don't read or touch the project-folder wizard's `.fairscape-wizard-state.json` — that's a different flow.
+- Don't migrate `.fairscape-wizard-state.json` yourself — that's the unified wizard's startup migration step (see `fairscape-rocrate-wizard/SKILL.md` "Migration from legacy state files"). Just report you saw a legacy file and recommend running the wizard.

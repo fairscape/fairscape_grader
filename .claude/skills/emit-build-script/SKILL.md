@@ -1,6 +1,6 @@
 ---
 name: emit-build-script
-description: Generate the canonical build_rocrate.py from .fairscape-wizard-state.json. Inlines all entity data, expands bulk groups via glob loops, runs the script, then runs fairscape rocrate validate. The emitted script is the durable artifact — re-runnable, human-readable, and editable.
+description: LEGACY (used only by `fairscape-rocrate-wizard-legacy`). Generate the canonical build_rocrate.py from entity-centric `.fairscape-wizard-state.json`. For the unified `fairscape-rocrate-wizard`, `emit-build-shell` writes a 3-line `build_rocrate.sh` that delegates to `fairscape-cli import manifest` instead — shorter, stays correct as the importer evolves.
 ---
 
 # Emit build_rocrate.py

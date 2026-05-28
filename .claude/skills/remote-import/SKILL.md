@@ -1,11 +1,17 @@
 ---
 name: remote-import
-description: Phase 1 of the remote-source wizard. Take a public Dataverse DOI or PhysioNet URL, shell out to `fairscape-cli import`, and produce a real RO-Crate directory whose `ro-crate-metadata.json` already has minimal metadata (name, description, authors, keywords, version, doi, license) and per-file `contentUrl` entries pointing at remote URLs.
+description: Phase 1 of the remote-source wizard. Take a public dataset reference (Dataverse DOI, PhysioNet URL, Figshare article, or anything else publicly accessible) and produce a real RO-Crate directory whose `ro-crate-metadata.json` already has minimal metadata (name, description, authors, keywords, version, doi, license) and per-file `contentUrl` entries pointing at remote URLs. For Dataverse/PhysioNet/Figshare it shells out to the dedicated `fairscape-cli import` subcommand; for anything else it falls back to `build-manifest` then `fairscape-cli import manifest`.
 ---
 
 # Remote import — Phase 1
 
-You wrap `fairscape-cli import {dataverse|physionet}` and capture the result in `.fairscape-remote-state.json`. Public datasets only — no API tokens.
+You wrap `fairscape-cli import {dataverse|physionet|figshare|manifest}` and capture the result in `.fairscape-remote-state.json`. Public datasets only — no API tokens.
+
+**For sources without a dedicated importer**, this skill orchestrates a two-step path:
+1. Invoke `build-manifest` to research the dataset's published file inventory and write `manifest.csv` + `crate.json`.
+2. Shell out to `fairscape-cli import manifest` to produce the same crate shape the dedicated importers produce.
+
+Either path lands the user at `state.phase = "imported"` and `tabular_files` populated — downstream phases (`remote-schema-infer`, `remote-ai-ready-enrich`, ...) don't care which import path got used.
 
 ## What to tell the user before any commands run
 
@@ -25,23 +31,64 @@ Optionally ask for an output directory. Default: `./<slug>-rocrate` resolved aga
 
 ## Detect source kind
 
-- `doi:` prefix → `dataverse`. Default `--server-url https://dataverse.harvard.edu` unless the input came from a known non-Harvard host (e.g. `dataverse.lib.virginia.edu`), in which case pass `--server-url <host>`.
+Pick the first match:
+
+- `doi:` prefix OR a known Dataverse hostname (`dataverse.harvard.edu`, `dataverse.lib.virginia.edu`, ...) → `dataverse`. Default `--server-url https://dataverse.harvard.edu` unless the input came from a known non-Harvard host, in which case pass `--server-url <host>`. (Note: `doi:10.6084/m9.figshare.*` is a Figshare DOI, not Dataverse — check before defaulting.)
 - `physionet.org/content/` substring → `physionet`.
-- Anything else → tell the user "I only handle Dataverse DOIs or PhysioNet URLs right now."
+- DOI prefix `10.6084/m9.figshare.` OR `figshare.com/articles/` substring OR a bare numeric figshare article ID the user has flagged as such → `figshare`.
+- The orchestrator passed `source.kind = "local"` directly (no auto-detection — the user picked "local folder" at the wizard's Phase 1 branch) → `local`.
+- **Anything else** → `manifest`. This includes NCBI/GenBank/SRA/GEO URLs, ProteomeXchange/PRIDE, cellxgene, OpenNeuro, AWS/GCP open-data buckets, GitHub releases, lab portals, or just a "paper at <DOI>, data at <URL>" description. Don't tell the user "I can't handle this" — that's wrong; route to the manifest path instead.
 
 ## Run the import
 
-For Dataverse:
+### Dataverse
 ```
 fairscape-cli import dataverse <DOI> --output-dir <dir> [--server-url <url>]
 ```
 
-For PhysioNet:
+### PhysioNet
 ```
 fairscape-cli import physionet <URL> --output-dir <dir>
 ```
 
-Run via `Bash`. If it fails, surface the CLI's stderr verbatim — don't paraphrase. Common causes: dataset is private (we say so + suggest the user try a public one), URL malformed, network down.
+### Figshare
+```
+fairscape-cli import figshare <ARTICLE_ID> --output-dir <dir>
+```
+
+### Manifest (generic remote fallback)
+
+Two steps, both required:
+
+1. **Build the manifest.** Invoke `build-manifest` with the user's brief (whatever they pasted: a paper DOI, a dataset URL, a "data is at <X>" hint). It produces:
+   ```
+   <workdir>/<slug>/
+     manifest.csv
+     crate.json
+   ```
+   where `<slug>` is a kebab-cased best guess from the dataset title. `build-manifest` does NOT call the importer — that's the next step.
+
+2. **Import the manifest.** Pick a crate output directory (default: `<workdir>/<slug>-rocrate`). Tell the user the path before running. Then:
+   ```
+   fairscape-cli import manifest <workdir>/<slug>/manifest.csv --output-dir <crate_dir>
+   ```
+
+### Local folder
+
+Four steps, the orchestrator drives them through this skill:
+
+1. **Collect crate-level metadata via the form.** Invoke `extract-crate-metadata` with `mode=form`. It runs an `AskUserQuestion`-driven form for name, description, authors, license, keywords, publication_date, doi. Writes `state.crate_metadata`. State phase → `metadata_captured`.
+2. **Walk the folder.** Invoke `scan-project-folder` against `state.source.project_root`. It enumerates files, categorizes by extension, and detects bulk groups (≥10 same-extension siblings in one directory). Writes `state.scan`.
+3. **Build the manifest.** Invoke `build-local-manifest`. It hashes singleton files (streaming md5+sha256), skips hashes for bulk-group members, writes `<project_root>/manifest.csv` + `<project_root>/crate.json`. State phase → `manifest_built`.
+4. **Import the manifest.** Shell out:
+   ```
+   fairscape-cli import manifest <project_root>/manifest.csv --output-dir <project_root>
+   ```
+   The crate is written *into* the project root — `<project_root>/ro-crate-metadata.json`.
+
+Run all steps via `Bash`. If any fails, surface stderr verbatim. Common causes: form was cancelled mid-way (state.crate_metadata incomplete), folder has zero files after noise-dir filtering, hash computation hit a permission error (skill logs which file), or CSV had a description shorter than 10 characters (the Dataset model's minimum — `build-local-manifest` should pad, but if a user pre-edits the CSV they can violate this).
+
+If any step fails, surface stderr verbatim. Common causes for the dedicated importers: dataset is private (suggest a public one), URL malformed, network down. Common causes for the manifest path: source's file inventory wasn't findable (build-manifest will say so), HEAD requests failed (URL pattern wrong), CSV missing required columns.
 
 ## After it succeeds
 
@@ -70,10 +117,13 @@ Either create `.fairscape-remote-state.json` if missing, or update the existing 
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "phase": "imported",
-  "source": {"kind": "dataverse", "url_or_doi": "doi:10.7910/DVN/XYZ",
-             "server_url": "https://dataverse.harvard.edu"},
+  "source": {"kind": "dataverse|physionet|figshare|manifest|local",
+             "url_or_doi": "doi:10.7910/DVN/XYZ",
+             "server_url": "https://dataverse.harvard.edu",
+             "manifest_dir": "<abs path>",
+             "project_root": "<abs path>"},
   "crate_dir": "<abs path>",
   "crate_path": "<abs path>/ro-crate-metadata.json",
   "imported_at": "<UTC ISO8601>",
@@ -91,11 +141,14 @@ Either create `.fairscape-remote-state.json` if missing, or update the existing 
 
 Preserve any pre-existing fields (e.g. if the orchestrator already wrote `source.url_or_doi` before invoking you). Append to `history` rather than overwriting.
 
+For the **manifest path**, also set `source.manifest_dir` to the folder containing `manifest.csv` + `crate.json`, so resume logic can find the originals (and `build-manifest` is idempotent — re-running it overwrites in place).
+
 Set `state.phase = "imported"` last, after the file is written.
 
 ## Don't
 
-- Don't ask the user to fill in name/description/authors yourself — the CLI already did that from the upstream metadata. Phase 3 enriches with paper-derived fields.
+- Don't ask the user to fill in name/description/authors yourself — for the dedicated importers the CLI already did that from the upstream metadata, and for the manifest path `build-manifest` already populated the sidecar from the paper. Phase 3 enriches with paper-derived fields.
 - Don't `Read` the entire crate JSON into the user's context. Read it, extract the fields you need, summarize.
 - Don't fetch any of the data files — `contentUrl`s stay remote. Phase 2 will sample.
 - Don't pass `--token` for the first version. If the user mentions a private dataset, tell them token support is out of scope right now.
+- Don't tell the user "I only handle Dataverse or PhysioNet" when their input doesn't match a known pattern — that's outdated. Route to the manifest path instead.

@@ -1,11 +1,13 @@
 ---
-name: remote-provenance-tracking
-description: Phase 4 of the remote-source wizard. Capture what computational steps produced the derived files in the crate — software run, datasets consumed, datasets produced. Appends Software and Computation entities to ro-crate-metadata.json and runs `fairscape-cli augment link-inverses` to fill in inverse properties (generatedBy, usedByComputation, wasDerivedFrom).
+name: provenance-tracking
+description: Phase 4 of the unified wizard. Capture what computational steps produced the derived files in the crate — software run, datasets consumed, datasets produced. Works against any source kind (local folder, Dataverse, PhysioNet, Figshare, generic manifest). Appends Software and Computation entities to ro-crate-metadata.json and runs `fairscape-cli augment link-inverses` to fill in inverse properties (generatedBy, usedByComputation, wasDerivedFrom).
 ---
 
-# Remote provenance tracking — Phase 4
+# Provenance tracking — Phase 4
 
 A freshly imported crate lists files but says nothing about how they came to exist. The Provenance criterion (rubrics 1.a–1.d) scores low because the graph has no `Computation` entities and no `generatedBy` / `wasDerivedFrom` / `usedByComputation` edges. This skill collects, from the user, one Computation per pipeline step and links inputs / software / outputs into the @graph, then calls `fairscape-cli augment link-inverses` to fill in inverse properties automatically.
+
+Works the same for all source kinds — the crate shape after Phase 1 is identical whether the import came from Dataverse, PhysioNet, Figshare, generic remote manifest, or local folder. The interview model and state writes are unchanged.
 
 The point is **documenting steps, not files**. One `Computation` can wrap many inputs and many outputs — if 50 raw CSVs were cleaned by the same script into 50 cleaned CSVs, that's one Computation, not 50.
 

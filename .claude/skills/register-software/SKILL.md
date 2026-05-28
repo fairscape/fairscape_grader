@@ -1,6 +1,6 @@
 ---
 name: register-software
-description: Capture a script (.py, .R, .sh, .ipynb, etc.) that the user ran as a Software entity. Use when the user names a script that drives a step in their pipeline.
+description: LEGACY (used only by `fairscape-rocrate-wizard-legacy`). Capture a script (.py, .R, .sh, .ipynb, etc.) that the user ran as a Software entity in entity-centric wizard state. For new projects use the unified `fairscape-rocrate-wizard` — Phase 4 (`provenance-tracking`) handles software entries against the imported crate's @graph, source-kind-agnostic.
 ---
 
 # Register software

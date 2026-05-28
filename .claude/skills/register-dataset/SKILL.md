@@ -1,6 +1,6 @@
 ---
 name: register-dataset
-description: Capture a single distinct file as a Dataset in wizard state. For a folder of similar files use register-folder-of-alike instead.
+description: LEGACY (used only by `fairscape-rocrate-wizard-legacy`). Capture a single distinct file as a Dataset in entity-centric wizard state. For new projects use the unified `fairscape-rocrate-wizard` — its local-folder branch builds a manifest with one row per file (no per-file interview). For a folder of similar files use register-folder-of-alike instead.
 ---
 
 # Register a single dataset

@@ -1,6 +1,6 @@
 ---
 name: register-folder-of-alike
-description: Capture a folder of similar files (e.g. 847 microscopy .tif images) as a single bulk template — one set of metadata that expands per-file when the build script runs. Use whenever the user gestures at a folder rather than a single file.
+description: LEGACY (used only by `fairscape-rocrate-wizard-legacy`). Capture a folder of similar files (e.g. 847 microscopy .tif images) as a single bulk template in entity-centric wizard state. For new projects use the unified `fairscape-rocrate-wizard` — its local-folder branch auto-detects bulk groups (≥10 same-extension siblings in one directory) during folder walk; no per-template interview needed.
 ---
 
 # Register a folder of alike entities

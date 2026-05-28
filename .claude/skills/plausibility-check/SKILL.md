@@ -1,6 +1,6 @@
 ---
 name: plausibility-check
-description: Validate the in-progress wizard state for graph plausibility — orphan datasets, dangling references, missing files, computations with no inputs/outputs. Reports issues as a numbered list for the user to confirm or fix.
+description: LEGACY (used only by `fairscape-rocrate-wizard-legacy`). Validate entity-centric wizard state for graph plausibility — orphan datasets, dangling references, missing files, computations with no inputs/outputs. For the unified `fairscape-rocrate-wizard`, plausibility is enforced by the manifest format itself + `fairscape-cli rocrate validate` (the pydantic model) after import.
 ---
 
 # Plausibility check

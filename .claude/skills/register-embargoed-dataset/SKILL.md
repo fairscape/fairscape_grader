@@ -1,6 +1,6 @@
 ---
 name: register-embargoed-dataset
-description: Add Dataset entities for raw inputs (or unreleased outputs) that aren't physically in the crate but need to exist so provenance is complete. Sets `contentUrl: "Embargoed"` on each entity and appends to the crate `@graph`. Supports single or bulk-by-template registration (e.g. one Dataset per participant). Invoked by remote-provenance-tracking when the user describes a pipeline step whose inputs/outputs are sensitive, too large, temporary, restricted, or otherwise missing.
+description: Add Dataset entities for raw inputs (or unreleased outputs) that aren't physically in the crate but need to exist so provenance is complete. Sets `contentUrl: "Embargoed"` on each entity and appends to the crate `@graph`. Supports single or bulk-by-template registration (e.g. one Dataset per participant). Invoked by provenance-tracking when the user describes a pipeline step whose inputs/outputs are sensitive, too large, temporary, restricted, or otherwise missing.
 ---
 
 # Register embargoed Datasets

@@ -1,6 +1,6 @@
 ---
 name: create-computation
-description: Wire one step of the pipeline — link the script that ran, the inputs it used, and the outputs it produced. Invoked after the user describes a step ("I ran clean.py on raw.csv to get cleaned.csv").
+description: LEGACY (used only by `fairscape-rocrate-wizard-legacy`). Wire one step of the pipeline in entity-centric wizard state. For new projects use the unified `fairscape-rocrate-wizard` — Phase 4 (`provenance-tracking`) handles computation entries directly against the imported crate's @graph, source-kind-agnostic.
 ---
 
 # Create a computation

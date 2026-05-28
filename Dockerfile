@@ -20,9 +20,22 @@ COPY pyproject.toml /opt/fairscape-wizard/pyproject.toml
 COPY src/ /opt/fairscape-wizard/src/
 RUN pip install /opt/fairscape-wizard
 
-COPY .claude /root/.claude
+# Skills are baked OUTSIDE /root/.claude so they don't get hidden when the
+# auth named volume is mounted at /root/.claude. The entrypoint syncs them
+# into the live config dir on each start so updates land even on existing
+# volumes.
+COPY .claude/skills /opt/wizard-skills/
+
+COPY <<'EOF' /usr/local/bin/sandbox-entry.sh
+#!/usr/bin/env bash
+set -e
+mkdir -p /root/.claude/skills
+cp -rT /opt/wizard-skills /root/.claude/skills
+exec claude "$@"
+EOF
+RUN chmod +x /usr/local/bin/sandbox-entry.sh
 
 WORKDIR /workspace
 
-ENTRYPOINT ["claude"]
+ENTRYPOINT ["/usr/local/bin/sandbox-entry.sh"]
 CMD ["--dangerously-skip-permissions"]

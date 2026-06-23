@@ -64,6 +64,28 @@ Install with:
 pip install -e .
 ```
 
+## Sandboxed run (Docker)
+
+Run the wizard in a container that can only see one folder. Inside the container, `--dangerously-skip-permissions` ("YOLO mode") is safe — the container has no filesystem access outside the bind mount.
+
+```bash
+# one-time: build the image (bakes in Claude Code + fairscape-cli + the wizard skills)
+./sandbox.sh --build
+
+# launch against any folder
+./sandbox.sh ~/crates/my-paper
+```
+
+First launch drops you into `claude` with no credentials — run `/login` inside to OAuth with your Claude subscription. The token is saved to a named Docker volume (`fairscape-claude-auth`) and reused on every later launch; no re-login per run.
+
+The folder you pass is mounted as `/workspace`; outputs (the RO-Crate, `manifest.csv`, `build_rocrate.sh`, state) land back in that folder on the host. Everything else on your disk is invisible to the container.
+
+Other launcher commands:
+- `./sandbox.sh --build` — force a rebuild after pulling new skills
+- `./sandbox.sh --shell <folder>` — drop into bash instead of starting `claude`
+- `./sandbox.sh --logout` — wipe the persisted credentials volume
+- `./sandbox.sh --help`
+
 ## Out of scope (for now)
 
 - **BYO-LLM / Electron host.** The wizard logic lives in skill markdown; porting to a non-Claude-Code host is a separate effort.

@@ -30,16 +30,43 @@ from collections import defaultdict
 from pathlib import Path
 
 HERE = Path(__file__).resolve()
-AGENT_ROOT = HERE.parents[2]                      # .../fairscape-agent
-RUBRIC_SRC_DIR = AGENT_ROOT / "rubrics" / "ai-ready"
+
+
+def _find_rubric_src_dir() -> Path:
+    """Locate the ``rubrics/ai-ready`` assets (``extract.py`` + the 28 rubric YAMLs).
+
+    Two supported layouts:
+
+    * **editable / source checkout** — assets live at ``<repo>/rubrics/ai-ready``,
+      two parents above this file's package directory.
+    * **pip-installed wheel** — assets are bundled inside the package at
+      ``fairscape_wizard/_rubrics/ai-ready`` (see the ``force-include`` mapping in
+      ``pyproject.toml``). The repo-relative path does not exist once installed.
+    """
+    candidates = [
+        HERE.parents[2] / "rubrics" / "ai-ready",   # dev checkout: src/fairscape_wizard/..
+        HERE.parent / "_rubrics" / "ai-ready",       # bundled inside the wheel
+    ]
+    for c in candidates:
+        if (c / "extract.py").exists():
+            return c
+    raise ModuleNotFoundError(
+        "fairscape_wizard: could not locate the rubrics/ai-ready assets (extract.py). "
+        f"Looked in: {', '.join(str(c) for c in candidates)}"
+    )
+
+
+RUBRIC_SRC_DIR = _find_rubric_src_dir()
 
 if str(RUBRIC_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(RUBRIC_SRC_DIR))
 
-# fairscape_models lives as a sibling repo when not pip-installed.
-_MODELS_DIR = AGENT_ROOT.parent / "fairscape_models"
-if _MODELS_DIR.exists() and str(_MODELS_DIR) not in sys.path:
-    sys.path.insert(0, str(_MODELS_DIR))
+# fairscape_models is a declared dependency (installed via pip). As a dev-checkout
+# fallback, also look for it as a sibling repo when it isn't already importable.
+if len(HERE.parents) > 3:
+    _MODELS_DIR = HERE.parents[3] / "fairscape_models"
+    if _MODELS_DIR.exists() and str(_MODELS_DIR) not in sys.path:
+        sys.path.insert(0, str(_MODELS_DIR))
 
 from extract import ALL_EXTRACTORS, ExtractContext, ReleaseBundle, root_summary  # noqa: E402
 

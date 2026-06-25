@@ -3,26 +3,51 @@ criterion: "Sustainability"
 sub_criterion: "Domain-appropriate"
 
 practice: |
-  Ensure single-domain raw or processed data are deposited in a
-  FAIR-domain-appropriate specialist repository if available.
-suggested_resources: ["FAIRsharing.org", "NIH GREI repositories"]
+  Ensure data are deposited in a recognized, supported research-data
+  repository — a domain-appropriate specialist repository where a
+  well-established one fits the data type, or otherwise a well-known
+  generalist repository.
+suggested_resources:
+  - "NIH BMIC domain-specific repositories: https://www.nlm.nih.gov/NIHbmic/domain_specific_repositories.html"
+  - "ELIXIR deposition databases: https://elixir-europe.org/platforms/data/elixir-deposition-databases"
+  - "FAIRsharing.org"
+  - "re3data.org"
 
 intent: |
-  Where a domain-specialist repository exists for this kind of data,
-  the data is deposited there — GEO for transcriptomics, dbGaP for
-  human genetics, PhysioNet for physiological signals, PRIDE for
-  proteomics, BioStudies for omics, etc. Generic hosting is fine
-  when no specialist exists, but a specialist match should be used
-  when available.
+  The data should live in an established, community-recognized data
+  repository rather than only on a personal site, lab web page, or
+  ad-hoc file host. There are hundreds of acceptable repositories and
+  they cannot be enumerated — the NIH BMIC and ELIXIR catalogs above are
+  starting points, NOT an exhaustive allow-list, and many more exist.
+  Two broad cases both fully satisfy this criterion:
+    1. A domain-appropriate specialist repository for the data type
+       (e.g. a sequence archive for sequencing data, a proteomics
+       repository for mass-spec, an imaging archive for imaging) — there
+       are very many such repositories across domains.
+    2. A well-known, supported generalist repository — Zenodo,
+       Dataverse, Figshare, Dryad, OSF, and the like. A generalist is
+       acceptable on its own, including when no specialist clearly fits.
+  Be accepting. Do NOT down-score data merely because it sits in a
+  generalist rather than a specialist, and do NOT require the repository
+  to appear on any particular list. The judgment is simply whether the
+  hosting location is a recognized, supported, persistent data
+  repository for research data. When the specific repository is not one
+  you recognize by name, a well-formed persistent identifier or an
+  institutional / community data-repository host should be treated as
+  acceptable — err toward accepting.
 
 what_to_look_for:
-  - distribution / contentUrl pointing to a recognized specialist
-    repository.
-  - Accession numbers from such repositories (GSE/GDS, GSEAxxx,
-    EGA, PRJ, dbGaP phs IDs, PhysioNet slugs, etc.).
-  - isPartOf / publisher referring to the specialist repository.
-  - Where a specialist exists for this data type but isn't used,
-    rationale for using a generalist instead.
+  - distribution / contentUrl / publisher pointing to a recognized data
+    repository, specialist or generalist. Recognize the host from the
+    URL domain, a DOI / accession, or the publisher field.
+  - A persistent identifier (DOI, accession, ARK, handle) that implies
+    deposit in a managed repository.
+  - Whether the host is a managed research-data repository at all, as
+    opposed to a personal / lab website, a transient cloud link, or no
+    distribution at all.
+  - When the specific repository can't be recognized by name, treat a
+    well-formed persistent identifier or an institutional / community
+    data-repository host as acceptable.
 
 extractor_inputs:
   type: object
@@ -31,44 +56,41 @@ extractor_inputs:
       type: array
       description: |
         contentUrl / url / distribution entries across the root and
-        major Datasets.
-    domain_repo_indicators:
-      type: array
-      description: |
-        recognized specialist-repository signals detected in the
-        crate — GEO accessions, dbGaP phs IDs, PhysioNet slugs,
-        EGA / ENA / SRA accessions, PRIDE PXD, BioStudies S-BSST,
-        etc. Each entry includes the value and which repo it maps to.
+        major Datasets. Each entry includes the URL and its `host`
+        (hosting domain) so the repository can be recognized without
+        matching against any fixed list.
     publisher_info:
       type: ["object", "string", "null"]
       description: publisher on the root dataset
     data_domain_hint:
-      type: ["string", "null"]
+      type: ["object", "null"]
       description: |
-        keywords / description text that hint at the data domain
-        (omics type, modality, etc.) so the LLM can judge whether
-        a specialist repo would have been expected.
+        root-level keywords and rai:dataCollectionType that hint at the
+        data domain, so the grader can sanity-check repository fit when a
+        specialist is clearly expected.
 
 scoring:
   "0":
     label: "Absent"
     rule: |
-      Data hosted only in a non-specialist generic location, with
-      no rationale, in a domain that has well-established
-      specialist repositories.
+      No recognized data repository is used — distribution points only
+      to a personal / lab website, a transient or private link, or there
+      is no distribution and no persistent identifier at all.
   "1":
     label: "Partial"
     rule: |
-      A specialist repository is referenced but coverage is partial
-      (e.g., only some component datasets deposited there), or the
-      generalist host has documented rationale.
+      Data are in a recognized repository but coverage is incomplete —
+      e.g. only some component datasets are deposited there, or links
+      are present but the hosting repository cannot be clearly
+      established.
   "2":
     label: "Substantive"
     rule: |
-      Component datasets are deposited in domain-appropriate
-      specialist repositories where they exist — or the data
-      domain genuinely has no specialist and a strong generalist
-      (Zenodo / Dataverse) is used.
+      Data are deposited in a recognized, supported data repository —
+      EITHER a domain-appropriate specialist OR a well-known generalist
+      (Zenodo, Dataverse, Figshare, Dryad, OSF, a specialist archive,
+      etc.). A generalist alone is sufficient; a specialist is not
+      required.
 
 output_schema:
   type: object

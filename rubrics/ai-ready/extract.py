@@ -19,7 +19,6 @@ Structure:
     ReleaseBundle              -- load + dedup root crate and sub-crates
     StandardsDetector          -- recognize standard vocab in @context
     ArchiveDetector            -- recognize FAIR-compliant archives
-    AccessionDetector          -- recognize specialist-repo accessions
     OntologyDetector           -- count / sample ontology IRIs
     SchemaStandardDetector     -- detect JSON Schema / Frictionless conformance
     RubricExtractor            -- abstract base for the 28 per-rubric classes
@@ -392,6 +391,16 @@ def get_additional_property(entity: dict, name: str) -> Optional[str]:
     return None
 
 
+def url_host(url: Any) -> Optional[str]:
+    """Best-effort hostname for a URL/URI so a repository can be recognized
+    from the host alone — without matching against any fixed list. Returns
+    None for non-URL strings (bare accessions, ``file:///`` paths)."""
+    if not isinstance(url, str) or "://" not in url:
+        return None
+    host = url.split("://", 1)[1].split("/", 1)[0]
+    return host or None
+
+
 # ---------------------------------------------------------------------------
 # Detectors — small reusable helpers
 # ---------------------------------------------------------------------------
@@ -466,38 +475,6 @@ class ArchiveDetector:
             return False
         s = str(value).lower()
         return any(host in s for host in ("doi.org", "hdl.handle.net", "n2t.net", "ark:", "/ark/", "purl.org"))
-
-
-class AccessionDetector:
-    """Pattern-match specialist-repo accession prefixes inside contentUrl
-    strings (LEARNINGS.md item 3 + UpdatesNeeded.md 'Domain Appropriate')."""
-
-    PATTERNS: ClassVar[Dict[str, Tuple[str, ...]]] = {
-        "GEO": ("GSE", "GDS"),
-        "SRA": ("SRR", "SRX", "SRP", "PRJ"),
-        "PRIDE": ("PXD",),
-        "MassIVE": ("MSV",),
-        "BioStudies": ("S-BSST",),
-        "dbGaP": ("phs",),
-        "EGA": ("EGAS", "EGAD"),
-        "ENA": ("ERR", "ERX", "ERP"),
-        "ArrayExpress": ("E-MTAB", "E-GEOD"),
-    }
-
-    @classmethod
-    def detect(cls, contentUrl: Any) -> List[Tuple[str, str]]:
-        if not contentUrl:
-            return []
-        urls = contentUrl if isinstance(contentUrl, list) else [contentUrl]
-        found: List[Tuple[str, str]] = []
-        for u in urls:
-            if not isinstance(u, str):
-                continue
-            for repo, prefixes in cls.PATTERNS.items():
-                if any(p in u for p in prefixes):
-                    found.append((repo, u[:120]))
-                    break
-        return found
 
 
 class OntologyDetector:
@@ -735,9 +712,6 @@ def aggregate_stats(bundle: ReleaseBundle) -> Dict[str, Any]:
     sample_by_src: Dict[str, List[dict]] = defaultdict(list)
     source_by_id = bundle.source_by_id
 
-    domain_repo_indicators: List[Dict[str, str]] = []
-    seen_accessions: set = set()
-
     if has_provenance_link(bundle.root_entity):
         entities_with_prov += 1
 
@@ -797,14 +771,6 @@ def aggregate_stats(bundle: ReleaseBundle) -> Dict[str, Any]:
                         protocols[scheme] += 1
                     if api_link is None and "/api" in u:
                         api_link = u
-                # Accession scan (LEARNINGS.md 5.b fix)
-                for repo, sample_url in AccessionDetector.detect(url):
-                    key = (repo, sample_url[:32])
-                    if key not in seen_accessions:
-                        seen_accessions.add(key)
-                        domain_repo_indicators.append({"repo": repo, "url": sample_url})
-                        if len(domain_repo_indicators) >= 12:
-                            pass  # collect a few more but cap reporting later
             fmt = get_format(e)
             if fmt:
                 formats[str(fmt)] += 1
@@ -931,7 +897,6 @@ def aggregate_stats(bundle: ReleaseBundle) -> Dict[str, Any]:
         "computation_with_io": computation_with_io,
         "experiment_with_io": experiment_with_io,
         "entities_with_provenance_link": entities_with_prov,
-        "domain_repo_indicators": domain_repo_indicators,
         "samples_note": SAMPLES_NOTE,
         "sample_sources": sorted(
             {s for s in source_by_id.values()}
@@ -1664,18 +1629,34 @@ class DomainAppropriate(RubricExtractor):
     rubric_slug = "domain-appropriate"
 
     def extract(self, ctx: ExtractContext) -> dict:
-        # Distribution-link samples drawn from the dataset sample bucket
+        # Collect distribution links from the root plus sampled Datasets, each
+        # annotated with its hosting domain. We deliberately do NOT match
+        # against a fixed allow-list of "approved" repositories: there are far
+        # more acceptable repositories (see the NIH BMIC and ELIXIR lists named
+        # in the rubric) than can be enumerated. The grader judges from the
+        # host / identifier / publisher whether this is a recognized, supported
+        # data repository — specialist or well-known generalist.
         distribution_links: List[dict] = []
-        for s in ctx.stats["samples"]["dataset"][:10]:
+        seen: set = set()
+        sources = [{"@id": ctx.root.get("@id"),
+                    "contentUrl": first_present(ctx.root, "contentUrl", "url", "distribution")}]
+        sources.extend(ctx.stats["samples"]["dataset"][:10])
+        for s in sources:
             url = s.get("contentUrl") or s.get("url")
-            if url:
-                distribution_links.append({"@id": s.get("@id"), "url": url})
+            if not url:
+                continue
+            for u in (url if isinstance(url, list) else [url]):
+                if not isinstance(u, str) or u in seen:
+                    continue
+                seen.add(u)
+                distribution_links.append({"@id": s.get("@id"), "url": u, "host": url_host(u)})
         return {
             "distribution_links": distribution_links,
-            "domain_repo_indicators": ctx.stats["domain_repo_indicators"][:12],
             "publisher_info": ctx.publisher,
-            "data_domain_hint": ctx.root.get("rai:dataCollectionType") or ctx.root.get("keywords"),
-            "distinct_protocols": ctx.stats["distinct_protocols"],
+            "data_domain_hint": {
+                "keywords": ctx.root.get("keywords"),
+                "rai:dataCollectionType": ctx.root.get("rai:dataCollectionType"),
+            },
         }
 
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fairscape-wizard"
-version = "0.2.2"
+version = "0.3.0"
 description = "Helper module for the FAIRSCAPE RO-Crate wizard Claude Code skill bundle"
 requires-python = ">=3.10"
 dependencies = [
@@ -13,6 +13,9 @@ dependencies = [
     "pydantic-ai>=0.0.14",
     "pyyaml",
 ]
+
+[project.scripts]
+fairscape-grade = "fairscape_wizard.grade:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fairscape_wizard"]

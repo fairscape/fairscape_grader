@@ -56,6 +56,15 @@ fairscape-grade <ro-crate-metadata.json> <output-dir> \
 | `groq` | `GROQ_API_KEY` | `groq:llama-3.3-70b-versatile` |
 | `uvarc` | *(used directly)* | `uvarc:Kimi K2.5` — UVA RC GenAI endpoint |
 
+**Local models.** Anything that speaks the OpenAI API (Ollama, LM Studio, vLLM,
+llama.cpp) works through the `openai:` prefix — point `OPENAI_BASE_URL` at your
+server and pass a throwaway key:
+
+```bash
+export OPENAI_BASE_URL=http://localhost:11434/v1   # e.g. Ollama
+fairscape-grade <crate.json> <out-dir> --model openai:llama3.1 --api-key local
+```
+
 It writes a per-rubric folder (`rubric.yaml` + `evidence.json` + `score.json`)
 under `<output-dir>/rubrics/`, a `summary.json`, and a top-level
 `aggregated_score.json` with totals grouped by criterion.

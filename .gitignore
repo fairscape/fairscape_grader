@@ -1,0 +1,13 @@
+# Build artifacts
+dist/
+
+# Reference docs / generated artifacts (hard-coded)
+AI-Ready.pdf
+FAIRSCAPE metadata mapping to criteria.csv
+rubrics/ai-ready/EVIDENCE_SOURCES.md
+rubrics/ai-ready/LEARNINGS.md
+rubrics/ai-ready/UpdatesNeeded.md
+
+# Python caches
+__pycache__/
+*.py[cod]

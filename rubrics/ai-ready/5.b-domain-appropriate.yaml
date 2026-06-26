@@ -24,8 +24,11 @@ intent: |
        (e.g. a sequence archive for sequencing data, a proteomics
        repository for mass-spec, an imaging archive for imaging) — there
        are very many such repositories across domains.
-    2. A well-known, supported generalist repository — Zenodo,
-       Dataverse, Figshare, Dryad, OSF, and the like. A generalist is
+    2. A well-known, supported generalist repository. The seven NIH
+       GREI generalist repositories all fully qualify: Figshare,
+       Dataverse, Zenodo, Dryad, Vivli, the Open Science Framework
+       (OSF), and Mendeley Data. These are examples, not an exhaustive
+       list — other comparable generalists qualify too. A generalist is
        acceptable on its own, including when no specialist clearly fits.
   Be accepting. Do NOT down-score data merely because it sits in a
   generalist rather than a specialist, and do NOT require the repository
@@ -87,10 +90,11 @@ scoring:
     label: "Substantive"
     rule: |
       Data are deposited in a recognized, supported data repository —
-      EITHER a domain-appropriate specialist OR a well-known generalist
-      (Zenodo, Dataverse, Figshare, Dryad, OSF, a specialist archive,
-      etc.). A generalist alone is sufficient; a specialist is not
-      required.
+      EITHER a domain-appropriate specialist OR a well-known generalist.
+      Any of the seven NIH GREI generalists qualifies (Figshare,
+      Dataverse, Zenodo, Dryad, Vivli, OSF, Mendeley Data), as do other
+      comparable generalists and specialist archives. A generalist alone
+      is sufficient; a specialist is not required.
 
 output_schema:
   type: object

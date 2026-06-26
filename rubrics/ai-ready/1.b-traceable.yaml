@@ -23,8 +23,6 @@ what_to_look_for:
     QC, normalization, feature extraction) rather than one giant step.
   - Inputs / outputs explicitly named on each Computation.
 
-# Counting how many transformations exist is easy; judging granularity
-# and whether each step is software-linked is what the LLM does.
 extractor_inputs:
   type: object
   properties:

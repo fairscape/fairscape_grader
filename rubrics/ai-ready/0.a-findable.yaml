@@ -9,8 +9,10 @@ suggested_resources: ["FAIRsharing.org", "NIH GREI repositories"]
 intent: |
   A discovery tool — a search engine, a DataCite query, a repository
   index — can find this dataset. That requires a persistent
-  identifier (DOI / handle / ARK) and deposit in a repository whose
-  metadata is harvestable and indexed.
+  identifier and deposit in a repository whose metadata is
+  harvestable and indexed. Any of the following count as a persistent
+  identifier: DOI, ARK, Handle (HDL), PURL, w3id, URN, RRID, or
+  SWHID.
 
 # DRAFT — overlaps with 5.a Persistent, which uses the same evidence
 # (root_identifier, publisher_info, archive_indicators) framed for
@@ -18,7 +20,8 @@ intent: |
 # decide to consolidate or keep these as paired rubrics scoring the
 # same evidence on different axes.
 what_to_look_for:
-  - DOI or other persistent identifier on the root dataset.
+  - A persistent identifier on the root dataset — any of DOI, ARK,
+    Handle (HDL), PURL, w3id, URN, RRID, or SWHID.
   - Publisher / hosting archive that's recognized as FAIR-compliant
     and harvestable — DataCite-registered, FAIRsharing-listed, or
     listed in NIH GREI.
@@ -31,7 +34,9 @@ extractor_inputs:
   properties:
     root_identifier:
       type: ["string", "null"]
-      description: identifier on the root dataset (DOI, handle, ARK, etc.)
+      description: |
+        persistent identifier on the root dataset — any of DOI, ARK,
+        Handle (HDL), PURL, w3id, URN, RRID, or SWHID.
     publisher_info:
       type: ["object", "string", "null"]
       description: publisher field on the root dataset

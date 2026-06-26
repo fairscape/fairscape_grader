@@ -10,17 +10,21 @@ practice: |
 suggested_resources: ["Croissant"]
 
 intent: |
-  A modeler can see how the data is meant to be split for analysis
-  (train / validation / test, or a deliberately undivided release),
-  what information was withheld at any point — exclusions, blinded
-  fields, embargoed records — and can find example records or
-  sample files to understand the structure before downloading the
-  full dataset.
+  A modeler can understand the structure and intended use of the
+  data before downloading the full dataset. Where splits are
+  meaningful and known, they can see how the data is meant to be
+  divided for analysis (train / validation / test) — but splits are
+  often not defined at release time, and their absence is not a
+  defect. They can also see what information was withheld at any
+  point — exclusions, blinded fields, embargoed records — and find
+  example records or sample files that convey the general structure
+  and content.
 
 what_to_look_for:
-  - Split definitions — Datasets explicitly tagged as training /
-    validation / test / holdout, or a clear narrative that no
-    splits are predefined and rationale.
+  - Split definitions, when applicable — Datasets explicitly tagged
+    as training / validation / test / holdout, or a narrative on how
+    the data is meant to be divided. Splits are optional — many
+    datasets are released without predefined splits, which is fine.
   - Withheld-information documentation — fields excluded, records
     held back, blinded variables, embargoed components, with
     reason.
@@ -63,22 +67,26 @@ scoring:
   "0":
     label: "Absent"
     rule: |
-      No split discussion, no withheld-information documentation,
-      no examples — a modeler can't tell how to use this data
-      without inspecting the bytes.
+      No context on structure or intended use — no split discussion,
+      no withheld-information documentation, no examples — a modeler
+      can't tell how to use this data without inspecting the bytes.
   "1":
     label: "Partial"
     rule: |
-      Splits described OR withholding documented OR examples
-      provided, but not all three. Or splits are implied
-      (Datasets named 'train' / 'test') without rationale.
+      Some context is present but thin — e.g. examples or withholding
+      noted in passing, or splits implied (Datasets named
+      'train' / 'test') without explanation — leaving a reader with
+      an incomplete picture of the structure and intended use.
   "2":
     label: "Substantive"
     rule: |
-      Splits are explicitly defined or explicitly absent with
-      rationale; withheld information is documented where it
-      applies; example records or sample files let a reader
-      preview structure.
+      A reader can preview the structure and intended use before
+      downloading. Where splits are meaningful they are described,
+      but their absence does not lower the score — many datasets are
+      released without predefined splits. Withheld information is
+      documented where it applies, and example records or sample
+      files (or an equivalently clear structural description) let a
+      reader understand the data's general structure and content.
 
 output_schema:
   type: object

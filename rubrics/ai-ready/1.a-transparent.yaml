@@ -25,15 +25,6 @@ what_to_look_for:
   - Description text on the root dataset specific enough to disambiguate
     (e.g., "T2D cohort recruited at UVA Health 2020–2022" vs "EHR data").
 
-# The Python extractor produces an object of this shape and passes it to
-# the LLM grader as "facts". Aggregation across sub-crates is the
-# extractor's responsibility; the LLM sees the merged view.
-#
-# Gap vs. current AIReady.py: today only dataset_count is computed for
-# this criterion, which makes scoring near-trivial. The extractor needs
-# to also surface experiment / instrument / computation entities (so
-# Provenance has more than one signal) and at least sample Dataset
-# bodies so the LLM can read source narrative.
 extractor_inputs:
   type: object
   properties:
